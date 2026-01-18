@@ -26,26 +26,14 @@ class TestSlurmConfig:
             script_dir="/tmp/scripts",
             log_dir="/tmp/logs",
         )
-        assert config.submit_cmd == "sbatch"
-        assert config.squeue_cmd == "squeue"
-        assert config.cancel_cmd == "scancel"
-        assert config.sacct_cmd == "sacct"
         assert config.array is True
+        assert config.launcher_cmd == ""
+        assert config.srun_opts == ""
+        assert config.launcher_env_passthrough is False
+        assert config.env == {}
+        assert config.command == []
+        assert config.sbatch_extra_directives == []
         assert config.test_only is False
-
-    def test_custom_commands(self):
-        """Test setting custom SLURM commands."""
-        config = SlurmConfig(
-            template_path="templates/job.sbatch",
-            script_dir="/tmp/scripts",
-            log_dir="/tmp/logs",
-            submit_cmd="/opt/slurm/bin/sbatch",
-            squeue_cmd="/opt/slurm/bin/squeue",
-            cancel_cmd="/opt/slurm/bin/scancel",
-        )
-        assert config.submit_cmd == "/opt/slurm/bin/sbatch"
-        assert config.squeue_cmd == "/opt/slurm/bin/squeue"
-        assert config.cancel_cmd == "/opt/slurm/bin/scancel"
 
     def test_nested_sbatch_config(self):
         """Test nested sbatch configuration."""

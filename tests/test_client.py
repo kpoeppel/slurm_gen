@@ -6,12 +6,12 @@ from typing import Callable
 
 import pytest
 
-from slurm_gen import (
+from slurm_gen import SlurmConfig
+from slurm_gen.client import (
     FakeSlurmClient,
     FakeSlurmClientConfig,
     SlurmClient,
     SlurmClientConfig,
-    SlurmConfig,
     SlurmJob,
 )
 import slurm_gen.client
@@ -44,11 +44,16 @@ def make_mock_run(responses: dict[str, MockResult]) -> Callable:
 @pytest.fixture
 def slurm_config(tmp_path: Path) -> SlurmConfig:
     """Standard SlurmConfig for tests."""
-    return SlurmConfig(
+    config = SlurmConfig(
         template_path="templates/base.sbatch",
         script_dir=str(tmp_path / "scripts"),
         log_dir=str(tmp_path / "logs"),
     )
+    config.submit_cmd = "sbatch"
+    config.squeue_cmd = "squeue"
+    config.cancel_cmd = "scancel"
+    config.sacct_cmd = "sacct"
+    return config
 
 
 @pytest.fixture

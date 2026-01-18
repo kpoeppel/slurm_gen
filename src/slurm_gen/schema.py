@@ -7,19 +7,12 @@ script generation. Designed for use with compoconf.
 from __future__ import annotations
 
 from dataclasses import MISSING, dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from compoconf import (
     ConfigInterface,
     NonStrictDataclass,
-    RegistrableConfigInterface,
-    register_interface,
 )
-
-
-@register_interface
-class SlurmClientInterface(RegistrableConfigInterface):
-    """Abstraction layer over SLURM command interactions."""
 
 
 @dataclass(init=False)
@@ -49,10 +42,6 @@ class SlurmConfig(ConfigInterface):
         script_dir: Directory where generated scripts are written.
         log_dir: Directory for SLURM log files.
         array: Whether to use job arrays.
-        submit_cmd: Command to submit jobs (default: sbatch).
-        squeue_cmd: Command to query job status (default: squeue).
-        cancel_cmd: Command to cancel jobs (default: scancel).
-        sacct_cmd: Command to query accounting info (default: sacct).
         launcher_cmd: Additional launcher command.
         srun_opts: Additional srun options.
         launcher_env_passthrough: Pass environment to launcher.
@@ -61,8 +50,6 @@ class SlurmConfig(ConfigInterface):
         sbatch: sbatch configuration.
         sbatch_overrides: Override sbatch directives.
         sbatch_extra_directives: Extra sbatch directives.
-        test_only: If True, don't actually submit jobs.
-        client: SLURM client configuration.
     """
 
     class_name: str = "Slurm"
@@ -70,25 +57,55 @@ class SlurmConfig(ConfigInterface):
     script_dir: str = field(default=MISSING)
     log_dir: str = field(default=MISSING)
     array: bool = True
-    submit_cmd: str = "sbatch"
-    squeue_cmd: str = "squeue"
-    cancel_cmd: str = "scancel"
-    sacct_cmd: str = "sacct"
     launcher_cmd: str = ""
     srun_opts: str = ""
     launcher_env_passthrough: bool = False
     env: dict[str, Any] = field(default_factory=dict)
+    command: list[str] = field(default_factory=list)
     srun: SrunConfig = field(default_factory=SrunConfig)
     sbatch: SbatchConfig = field(default_factory=SbatchConfig)
-    sbatch_overrides: dict[str, Any] = field(default_factory=dict)
     sbatch_extra_directives: list[str] = field(default_factory=list)
     test_only: bool = False
-    client: SlurmClientInterface.cfgtype | None = None
+
+
+class SlurmClientInterface(Protocol):  # pragma: no cover - protocol definitions are not executable
+    """Protocol for SLURM client implementations."""
+
+    def configure(self, slurm_config: SlurmConfig) -> None:  # pragma: no cover
+        ...
+
+    def submit(self, name: str, script_path: str, log_path: str) -> str:  # pragma: no cover
+        ...
+
+    def submit_array(
+        self,
+        array_name: str,
+        script_path: str,
+        log_paths: list[str],
+        task_names: list[str],
+        start_index: int = 0,
+    ) -> list[str]:  # pragma: no cover
+        ...
+
+    def cancel(self, job_id: str) -> None:  # pragma: no cover
+        ...
+
+    def remove(self, job_id: str) -> None:  # pragma: no cover
+        ...
+
+    def squeue(self) -> dict[str, str]:  # pragma: no cover
+        ...
+
+    def job_ids_by_name(self, name: str) -> list[str]:  # pragma: no cover
+        ...
+
+    def get_job(self, job_id: str):  # pragma: no cover
+        ...
 
 
 __all__ = [
-    "SlurmClientInterface",
     "SlurmConfig",
     "SrunConfig",
     "SbatchConfig",
+    "SlurmClientInterface",
 ]
