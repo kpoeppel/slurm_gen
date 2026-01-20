@@ -41,6 +41,9 @@ class SlurmConfig(ConfigInterface):
         template_path: Path to the SBATCH template file.
         script_dir: Directory where generated scripts are written.
         log_dir: Directory for SLURM log files.
+        name: Optional job name for client tracking.
+        script_path: Optional path to the job script for submission.
+        log_path: Optional path to the log file for submission.
         array: Whether to use job arrays.
         launcher_cmd: Additional launcher command.
         srun_opts: Additional srun options.
@@ -56,6 +59,9 @@ class SlurmConfig(ConfigInterface):
     template_path: str = field(default=MISSING)
     script_dir: str = field(default=MISSING)
     log_dir: str = field(default=MISSING)
+    name: str | None = None
+    script_path: str | None = None
+    log_path: str | None = None
     array: bool = True
     launcher_cmd: str = ""
     srun_opts: str = ""
@@ -71,20 +77,10 @@ class SlurmConfig(ConfigInterface):
 class SlurmClientInterface(Protocol):  # pragma: no cover - protocol definitions are not executable
     """Protocol for SLURM client implementations."""
 
-    def configure(self, slurm_config: SlurmConfig) -> None:  # pragma: no cover
+    def submit(self, slurm_config: SlurmConfig) -> str:  # pragma: no cover
         ...
 
-    def submit(self, name: str, script_path: str, log_path: str) -> str:  # pragma: no cover
-        ...
-
-    def submit_array(
-        self,
-        array_name: str,
-        script_path: str,
-        log_paths: list[str],
-        task_names: list[str],
-        start_index: int = 0,
-    ) -> list[str]:  # pragma: no cover
+    def submit_array(self, slurm_config: SlurmConfig, indices: list[int]) -> list[str]:  # pragma: no cover
         ...
 
     def cancel(self, job_id: str) -> None:  # pragma: no cover
@@ -94,9 +90,6 @@ class SlurmClientInterface(Protocol):  # pragma: no cover - protocol definitions
         ...
 
     def squeue(self) -> dict[str, str]:  # pragma: no cover
-        ...
-
-    def job_ids_by_name(self, name: str) -> list[str]:  # pragma: no cover
         ...
 
     def get_job(self, job_id: str):  # pragma: no cover
