@@ -7,6 +7,7 @@ script generation. Designed for use with compoconf.
 from __future__ import annotations
 
 from dataclasses import MISSING, dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 
 from compoconf import (
@@ -27,6 +28,7 @@ class SbatchConfig(NonStrictDataclass):
     """Configuration for sbatch options."""
 
     account: str | None = None
+    job_name: str | None = None
     nodes: int | None = None
     partition: str | None = None
     qos: str | None = None
@@ -59,10 +61,10 @@ class SlurmConfig(ConfigInterface):
     template_path: str = field(default=MISSING)
     script_dir: str = field(default=MISSING)
     log_dir: str = field(default=MISSING)
-    name: str | None = None
+    name: str = "job"
     script_path: str | None = None
     log_path: str | None = None
-    array: bool = True
+    array: bool = False
     launcher_cmd: str = ""
     srun_opts: str = ""
     launcher_env_passthrough: bool = False
@@ -72,6 +74,12 @@ class SlurmConfig(ConfigInterface):
     sbatch: SbatchConfig = field(default_factory=SbatchConfig)
     sbatch_extra_directives: list[str] = field(default_factory=list)
     test_only: bool = False
+
+    def __post_init__(self):
+        if self.script_path is None:
+            self.script_path = str(Path(self.script_dir) / (self.name + ".sbatch"))
+        if self.log_path is None:
+            self.log_path = str(Path(self.log_dir) / (self.name + ".log"))
 
 
 class SlurmClientInterface(Protocol):  # pragma: no cover - protocol definitions are not executable

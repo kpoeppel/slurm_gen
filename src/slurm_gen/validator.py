@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterable
+from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
 
@@ -15,26 +16,28 @@ class SlurmValidationError(RuntimeError):
 
 
 def validate_job_script(
-    rendered: str,
+    rendered_path: str,
     job_name: str,
     required_tokens: Iterable[str] | None = None,
 ) -> None:
     """Validate a rendered SBATCH script.
 
     Args:
-        rendered: The rendered script content.
+        rendered_path: Path to the rendered script file.
         job_name: Expected job name in the script.
         required_tokens: Optional list of tokens that must appear in the script.
 
     Raises:
         SlurmValidationError: If validation fails.
     """
+    rendered = Path(rendered_path).read_text()
+
     # Check for job name directive
-    if f"#SBATCH --job-name={job_name}" not in rendered:
+    if f"--job-name={job_name}" not in rendered:
         raise SlurmValidationError("Rendered script missing job name directive")
 
     # Check for unreplaced template placeholders
-    if re.search(r"\{[A-Za-z0-9_]+\}", rendered):
+    if re.search(r"[^\$]\{[A-Za-z0-9_]+\}", rendered):
         raise SlurmValidationError("Unreplaced template placeholder detected")
 
     # Check for required tokens

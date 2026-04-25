@@ -8,7 +8,7 @@ import shlex
 import time
 from dataclasses import MISSING, dataclass, field
 
-from compoconf import ConfigInterface, register
+from compoconf import ConfigInterface, register, register_interface, RegistrableConfigInterface
 
 from slurm_gen.schema import SlurmClientInterface, SlurmConfig
 from slurm_gen.shell import run_command
@@ -37,7 +37,8 @@ class SlurmJob:
     submitted_at: float = field(default_factory=time.time)
 
 
-class BaseSlurmClient(SlurmClientInterface):
+@register_interface
+class BaseSlurmClient(SlurmClientInterface, RegistrableConfigInterface):
     """Base functionality shared by SLURM client implementations.
 
     Subclasses must implement:

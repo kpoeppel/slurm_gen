@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-import time
 from typing import Any
 
 from slurm_gen.schema import SlurmConfig
@@ -14,7 +13,10 @@ from slurm_gen.template_renderer import render_template_file
 def build_sbatch_directives(config: SlurmConfig) -> list[str]:
     directives: list[str] = []
     sbatch_values = asdict(config.sbatch)
+    jobname_present = False
     for key, value in sbatch_values.items():
+        if key == "job_name" and value is not None:
+            jobname_present = True
         if value is None:
             continue
         flag = key if key.startswith("--") else f"--{key.replace('_', '-')}"
@@ -22,6 +24,8 @@ def build_sbatch_directives(config: SlurmConfig) -> list[str]:
             directives.append(f"#SBATCH {flag}")
         else:
             directives.append(f"#SBATCH {flag}={value}")
+    if not jobname_present:
+        directives.append(f"#SBATCH --job-name={config.name}")
     for line in config.sbatch_extra_directives:
         directives.append(line if line.startswith("#SBATCH") else f"#SBATCH {line}")
     return directives
@@ -52,38 +56,26 @@ def build_replacements(
 def generate_script(
     config: SlurmConfig,
     *,
-    job_name: str,
-    log_path: str,
-    command: list[str],
+    job_name: str | None = None,
+    script_path: str | Path | None = None,
+    log_path: str | None = None,
+    command: list[str] | None = None,
     extra_args: list[str] | None = None,
-    output_dir: str | Path | None = None,
-    script_name: str | None = None,
-    now_ms: int | None = None,
 ) -> Path:
     if not config.template_path:
         raise ValueError("SlurmConfig.template_path is required")
-
-    script_dir: Path
-    if config.script_dir:
-        script_dir = Path(config.script_dir)
-    elif output_dir is not None:
-        script_dir = Path(output_dir)
-    else:
-        script_dir = Path(log_path).expanduser().parent
-
-    timestamp = int(time.time() * 1000) if now_ms is None else now_ms
-    script_name = script_name or f"{job_name}_{timestamp}.sbatch"
-    script_path = script_dir / script_name
-
+    job_name = config.name or job_name
+    script_path = (
+        script_path or config.script_path or Path(config.script_dir) / (job_name + ".sbatch")
+    )
     replacements = build_replacements(
         config,
         job_name=job_name,
-        log_path=log_path,
-        command=command,
-        extra_args=extra_args,
+        log_path=log_path or config.log_path,
+        command=(command or config.command) + list(extra_args or []),
     )
     render_template_file(config.template_path, script_path, replacements)
-    return script_path
+    return Path(script_path)
 
 
 def merge_slurm_config(base: dict[str, Any] | None, override: dict[str, Any] | None) -> dict[str, Any]:
