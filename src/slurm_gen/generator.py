@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+from compoconf import asdict
 
 from slurm_gen.schema import SlurmConfig
 from slurm_gen.template_renderer import render_template_file
