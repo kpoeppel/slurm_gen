@@ -62,7 +62,7 @@ class BaseSlurmClient(SlurmClientInterface, RegistrableConfigInterface):
         """Configure the client with SLURM settings."""
         self._slurm_config = slurm_config
 
-    def submit(self, name: str, script_path: str, log_path: str) -> str:  # pragma: no cover - interface
+    def submit(self, slurm_config: SlurmConfig) -> str:  # pragma: no cover - interface
         raise NotImplementedError
 
     def submit_array(
@@ -79,6 +79,9 @@ class BaseSlurmClient(SlurmClientInterface, RegistrableConfigInterface):
         raise NotImplementedError
 
     def squeue(self) -> dict[str, str]:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def update_excludes(self, job_id: str, nodelist: str) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
     @property
@@ -107,8 +110,8 @@ class FakeSlurmClientConfig(BaseSlurmClientConfig):
 class FakeSlurmClient(BaseSlurmClient):
     """In-memory SLURM simulator for testing.
 
-    This client simulates SLURM behavior without actually submitting jobs.
-    Useful for unit tests and development without a SLURM cluster.
+    This client simulates SLURM behavior without actually submitting jobs. Useful for
+    unit tests and development without a SLURM cluster.
     """
 
     config: FakeSlurmClientConfig
@@ -118,6 +121,8 @@ class FakeSlurmClient(BaseSlurmClient):
         super().__init__(config)
         self._jobs: dict[str, SlurmJob] = {}
         self._next_id = 1
+        # job_id -> last nodelist passed to update_excludes (test introspection)
+        self._excludes: dict[str, str] = {}
 
     def submit(self, slurm_config: SlurmConfig) -> str:
         job_id = str(self._next_id)
@@ -163,6 +168,10 @@ class FakeSlurmClient(BaseSlurmClient):
     def squeue(self) -> dict[str, str]:
         return {job_id: job.state for job_id, job in self._jobs.items()}
 
+    def update_excludes(self, job_id: str, nodelist: str) -> None:
+        """Record an exclude-node update (simulates ``scontrol update``)."""
+        self._excludes[job_id] = nodelist
+
     def get_job(self, job_id: str) -> SlurmJob:
         return self._jobs[job_id]
 
@@ -206,14 +215,15 @@ class SlurmClientConfig(BaseSlurmClientConfig):
     squeue_cmd: str = "squeue"
     scancel_cmd: str = "scancel"
     sacct_cmd: str = "sacct"
+    scontrol_cmd: str = "scontrol"
 
 
 @register
 class SlurmClient(BaseSlurmClient):
     """SLURM client that executes real SLURM commands.
 
-    This client shells out to sbatch, squeue, scancel, and sacct
-    to interact with a real SLURM cluster.
+    This client shells out to sbatch, squeue, scancel, and sacct to interact with a real
+    SLURM cluster.
     """
 
     config: SlurmClientConfig
@@ -227,7 +237,9 @@ class SlurmClient(BaseSlurmClient):
         submit_cmd = shlex.split(self.config.submit_cmd)
         proc = run_command([*submit_cmd, str(slurm_config.script_path)])
         if proc.returncode != 0:
-            raise RuntimeError(f"sbatch failed for {slurm_config.script_path}: {proc.stderr.strip()}")
+            raise RuntimeError(
+                f"sbatch failed for {slurm_config.script_path}: {proc.stderr.strip()}"
+            )
         job_id = self._parse_job_id(proc.stdout)
         if job_id is None:
             raise RuntimeError(f"Unable to parse job id from sbatch output: {proc.stdout.strip()}")
@@ -260,7 +272,9 @@ class SlurmClient(BaseSlurmClient):
         proc = run_command([*submit_cmd, f"--array={array_range}", str(slurm_config.script_path)])
 
         if proc.returncode != 0:
-            raise RuntimeError(f"sbatch failed for array {slurm_config.script_path}: {proc.stderr.strip()}")
+            raise RuntimeError(
+                f"sbatch failed for array {slurm_config.script_path}: {proc.stderr.strip()}"
+            )
 
         base_job_id = self._parse_job_id(proc.stdout)
         if base_job_id is None:
@@ -320,7 +334,9 @@ class SlurmClient(BaseSlurmClient):
 
         proc = run_command(full_cmd)
         if proc.returncode != 0:
-            LOGGER.warning(f"squeue: command failed with rc={proc.returncode}, stderr={proc.stderr}")
+            LOGGER.warning(
+                f"squeue: command failed with rc={proc.returncode}, stderr={proc.stderr}"
+            )
             return self._check_sacct_for_missing_jobs(job_ids, job_id_to_key)
 
         LOGGER.debug(f"squeue: output: {proc.stdout.strip()}")
@@ -341,7 +357,9 @@ class SlurmClient(BaseSlurmClient):
 
         missing_jobs = [jid for jid in job_ids if jid not in statuses]
         if missing_jobs:
-            LOGGER.info(f"squeue: {len(missing_jobs)} jobs not in queue, checking sacct for recent completion")
+            LOGGER.info(
+                f"squeue: {len(missing_jobs)} jobs not in queue, checking sacct for recent completion"
+            )
             missing_id_to_key = {str(jid): jid for jid in missing_jobs}
             sacct_statuses = self._check_sacct_for_missing_jobs(missing_jobs, missing_id_to_key)
             statuses.update(sacct_statuses)
@@ -352,7 +370,27 @@ class SlurmClient(BaseSlurmClient):
     def job_ids_by_name(self, name: str) -> list[str]:
         return [job_id for job_id, job in self._jobs.items() if job.config.name == name]
 
-    def _check_sacct_for_missing_jobs(self, job_ids: list[str], job_id_to_key: dict[str, str]) -> dict[str, str]:
+    def update_excludes(self, job_id: str, nodelist: str) -> None:
+        """Update a pending job's excluded-node list via ``scontrol update``.
+
+        Only pending jobs can be edited live; SLURM rejects the update for
+        running jobs (the caller is expected to restrict to PENDING).
+        ``nodelist`` replaces the job's current excluded-node list (pass the full
+        deduped list). The scontrol parameter is ``ExcNodeList`` (the field shown
+        by ``scontrol show job``); ``ExcludeNodes`` - the sbatch/#SBATCH spelling
+        - is rejected by scontrol with "Update of this parameter is not
+        supported".
+        """
+        cmd = shlex.split(self.config.scontrol_cmd)
+        full_cmd = [*cmd, "update", f"JobId={job_id}", f"ExcNodeList={nodelist}"]
+        LOGGER.info("update_excludes: %s", " ".join(full_cmd))
+        proc = run_command(full_cmd)
+        if proc.returncode != 0:
+            raise RuntimeError(f"scontrol update failed for job {job_id}: {proc.stderr.strip()}")
+
+    def _check_sacct_for_missing_jobs(
+        self, job_ids: list[str], job_id_to_key: dict[str, str]
+    ) -> dict[str, str]:
         """Check sacct for jobs that are no longer in squeue."""
         if not job_ids:
             return {}

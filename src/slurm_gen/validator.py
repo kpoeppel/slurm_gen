@@ -12,6 +12,7 @@ LOGGER = logging.getLogger(__name__)
 
 class SlurmValidationError(RuntimeError):
     """Raised when script validation fails."""
+
     pass
 
 
@@ -34,7 +35,9 @@ def validate_job_script(
 
     # Check for job name directive
     if f"--job-name={job_name}" not in rendered:
-        raise SlurmValidationError("Rendered script missing job name directive")
+        raise SlurmValidationError(
+            f"Script is missing job name directive: #SBATCH --job-name={job_name}"
+        )
 
     # Check for unreplaced template placeholders
     if re.search(r"[^\$]\{[A-Za-z0-9_]+\}", rendered):

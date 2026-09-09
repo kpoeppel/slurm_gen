@@ -142,8 +142,39 @@ job_ids = client.submit_array(
 - `SlurmConfig`: Main configuration for SLURM settings
 - `SlurmClientConfig`: Configuration for real SLURM client
 - `FakeSlurmClientConfig`: Configuration for fake client
-- `SbatchConfig`: SBATCH directive configuration
+- `SbatchConfig`: SBATCH directive configuration (non-strict: any extra key
+  becomes an `#SBATCH --key=value` directive)
 - `SrunConfig`: srun options configuration
+
+### Script generation
+
+- `build_sbatch_directives()`: Render `sbatch` into `#SBATCH` directives
+- `build_srun_args()`: Render `SlurmConfig.srun_args` into srun flags
+- `build_replacements()`: Build the template placeholder mapping
+- `generate_script()`: Render a `SlurmConfig` into an sbatch script
+- `merge_slurm_config()`: Deep-merge two config dictionaries
+
+`SlurmConfig` has two srun fields. `srun_args` is a **mapping**, so Hydra merges
+it key-by-key across the defaults list and a cluster group and an experiment can
+each contribute flags; it is rendered into the `{srun_opts}` placeholder ahead of
+the verbatim `srun_opts` string, and a `False` value removes a flag an inherited
+group set. The `srun` field is **legacy and deliberately not rendered** - see
+`SrunConfig` for why switching it on would change every cluster at once.
+
+### Node exclusion
+
+- `read_exclude_nodes()`: Parse a node-exclusion list file into a SLURM nodelist
+
+Set `SlurmConfig.exclude_file` to have `--exclude` resolved **from that file at
+render time**, overriding any `sbatch.exclude` baked in earlier. This matters for
+restarts: the script is re-rendered but the config was resolved at plan time, so
+without it a node excluded after the first submission would never reach the
+resubmitted job. A missing or empty file leaves any existing `sbatch.exclude`
+untouched, so a bad path can never silently drop the exclusions.
+
+`SlurmClient.update_excludes(job_id, nodelist)` applies a list to a job that is
+already queued, via `scontrol update JobId=.. ExcNodeList=..`. Only *pending*
+jobs can be edited live.
 
 ### Template & Validation
 
@@ -159,6 +190,24 @@ job_ids = client.submit_array(
 pytest tests/ -v
 ```
 
-## License
+## License and Attribution
 
-Apache-2.0
+Copyright 2026 Korbinian Poeppel.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+these files except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the [LICENSE](LICENSE)
+file for the specific language governing permissions and limitations under the
+License.
+
+This library is derived from `oellm_autoexp/slurm_gen` in
+[OpenEuroLLM/oellm-autoexp](https://github.com/OpenEuroLLM/oellm-autoexp),
+Copyright 2026 OpenEuroLLM Consortium, also licensed under Apache 2.0. It is
+maintained here as a standalone package and is periodically re-synced with
+upstream.

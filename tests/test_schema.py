@@ -1,7 +1,5 @@
 """Tests for configuration schema."""
 
-import pytest
-
 from slurm_gen import SlurmConfig, SbatchConfig, SrunConfig
 
 
@@ -34,6 +32,29 @@ class TestSlurmConfig:
         assert config.command == []
         assert config.sbatch_extra_directives == []
         assert config.test_only is False
+        assert config.exclude_file is None
+
+    def test_srun_args_and_srun_are_separate(self):
+        """``srun_args`` composes and is rendered; ``srun`` is legacy and is not."""
+        config = SlurmConfig(
+            template_path="templates/job.sbatch",
+            script_dir="/tmp/scripts",
+            log_dir="/tmp/logs",
+            srun_args=SrunConfig(cpu_bind="cores"),
+            srun=SrunConfig(wait=60),
+        )
+        assert config.srun_args.cpu_bind == "cores"
+        assert config.srun.wait == 60
+
+    def test_exclude_file(self):
+        """A node-exclusion list re-read whenever the script is rendered."""
+        config = SlurmConfig(
+            template_path="templates/job.sbatch",
+            script_dir="/tmp/scripts",
+            log_dir="/tmp/logs",
+            exclude_file="/shared/excluded_nodes.txt",
+        )
+        assert config.exclude_file == "/shared/excluded_nodes.txt"
 
     def test_nested_sbatch_config(self):
         """Test nested sbatch configuration."""
@@ -80,12 +101,17 @@ class TestSbatchConfig:
             partition="gpu-large",
             qos="high",
             time="7-00:00:00",
+            dependency="afterok:12345",
         )
         assert config.account == "project123"
         assert config.nodes == 8
         assert config.partition == "gpu-large"
         assert config.qos == "high"
         assert config.time == "7-00:00:00"
+        assert config.dependency == "afterok:12345"
+
+    def test_dependency_defaults_to_none(self):
+        assert SbatchConfig().dependency is None
 
 
 class TestSrunConfig:

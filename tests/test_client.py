@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
@@ -110,7 +110,9 @@ class TestFakeSlurmClient:
     def test_submit_job(self, tmp_path: Path):
         """Test submitting a single job."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        config = make_job_config(tmp_path, name="test_job", script_name="job.sbatch", log_name="log.txt")
+        config = make_job_config(
+            tmp_path, name="test_job", script_name="job.sbatch", log_name="log.txt"
+        )
         job_id = client.submit(config)
         assert job_id == "1"
         assert client.squeue()[job_id] == "PENDING"
@@ -118,8 +120,12 @@ class TestFakeSlurmClient:
     def test_submit_multiple_jobs(self, tmp_path: Path):
         """Test submitting multiple jobs."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        job1 = client.submit(make_job_config(tmp_path, name="job1", script_name="j1.sh", log_name="l1.txt"))
-        job2 = client.submit(make_job_config(tmp_path, name="job2", script_name="j2.sh", log_name="l2.txt"))
+        job1 = client.submit(
+            make_job_config(tmp_path, name="job1", script_name="j1.sh", log_name="l1.txt")
+        )
+        job2 = client.submit(
+            make_job_config(tmp_path, name="job2", script_name="j2.sh", log_name="l2.txt")
+        )
         assert job1 == "1"
         assert job2 == "2"
         assert len(client.squeue()) == 2
@@ -127,7 +133,9 @@ class TestFakeSlurmClient:
     def test_state_transitions(self, tmp_path: Path):
         """Test job state transitions."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        job_id = client.submit(make_job_config(tmp_path, name="demo", script_name="job.sbatch", log_name="log.txt"))
+        job_id = client.submit(
+            make_job_config(tmp_path, name="demo", script_name="job.sbatch", log_name="log.txt")
+        )
 
         client.set_state(job_id, "RUNNING")
         assert client.squeue()[job_id] == "RUNNING"
@@ -140,14 +148,18 @@ class TestFakeSlurmClient:
     def test_cancel_job(self, tmp_path: Path):
         """Test cancelling a job."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        job_id = client.submit(make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt"))
+        job_id = client.submit(
+            make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt")
+        )
         client.cancel(job_id)
         assert client.squeue()[job_id] == "CANCELLED"
 
     def test_remove_job(self, tmp_path: Path):
         """Test removing a job from tracking."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        job_id = client.submit(make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt"))
+        job_id = client.submit(
+            make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt")
+        )
         assert job_id in client.squeue()
         client.remove(job_id)
         assert job_id not in client.squeue()
@@ -157,7 +169,9 @@ class TestFakeSlurmClient:
         client = FakeSlurmClient(FakeSlurmClientConfig())
         client.submit(make_job_config(tmp_path, name="job_a", script_name="a.sh", log_name="a.txt"))
         client.submit(make_job_config(tmp_path, name="job_b", script_name="b.sh", log_name="b.txt"))
-        client.submit(make_job_config(tmp_path, name="job_a", script_name="a2.sh", log_name="a2.txt"))
+        client.submit(
+            make_job_config(tmp_path, name="job_a", script_name="a2.sh", log_name="a2.txt")
+        )
 
         job_a_ids = client.job_ids_by_name("job_a")
         assert len(job_a_ids) == 2
@@ -165,7 +179,9 @@ class TestFakeSlurmClient:
     def test_submit_array(self, tmp_path: Path):
         """Test submitting a job array."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        config = make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log")
+        config = make_job_config(
+            tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log"
+        )
         indices = [0, 1, 3]
         job_ids = client.submit_array(config, indices)
 
@@ -183,7 +199,9 @@ class TestFakeSlurmClient:
     def test_submit_array_with_start_index(self, tmp_path: Path):
         """Test submitting an array job with custom start index."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        config = make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log")
+        config = make_job_config(
+            tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log"
+        )
         indices = [5, 6]
         job_ids = client.submit_array(config, indices)
 
@@ -192,7 +210,9 @@ class TestFakeSlurmClient:
     def test_submit_array_with_non_contiguous_index(self, tmp_path: Path):
         """Test submitting an array job with custom start index."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        config = make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log")
+        config = make_job_config(
+            tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log"
+        )
         indices = [4, 6]
         job_ids = client.submit_array(config, indices)
 
@@ -201,9 +221,20 @@ class TestFakeSlurmClient:
     def test_submit_array_with_no_index(self, tmp_path: Path):
         """Test submitting an array job with custom start index."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
-        config = make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log")
+        config = make_job_config(
+            tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log"
+        )
         with pytest.raises(ValueError):
             client.submit_array(config, [])
+
+    def test_update_excludes_is_recorded(self, tmp_path: Path):
+        """The fake records the update so callers can be tested against it."""
+        client = FakeSlurmClient(FakeSlurmClientConfig())
+        job_id = client.submit(make_job_config(tmp_path))
+
+        client.update_excludes(job_id, "node01,node02")
+
+        assert client._excludes == {job_id: "node01,node02"}
 
     def test_register_job(self, tmp_path: Path):
         """Test registering an external job."""
@@ -232,7 +263,9 @@ class TestFakeSlurmClient:
         job_id = client.register_job("abc_xyz", config)
         assert job_id == "abc_xyz"
         # Next job should use _next_id (not crash on ValueError)
-        next_job_id = client.submit(make_job_config(tmp_path, name="new_job", script_name="j.sh", log_name="l.txt"))
+        next_job_id = client.submit(
+            make_job_config(tmp_path, name="new_job", script_name="j.sh", log_name="l.txt")
+        )
         assert next_job_id is not None
 
 
@@ -250,18 +283,24 @@ class TestSlurmClient:
 
     def test_submit_handles_failure(self, configured_client, tmp_path, monkeypatch):
         """Test that submit raises on sbatch failure."""
-        mock_run = make_mock_run({"sbatch": MockResult(returncode=1, stderr="sbatch: error: invalid option")})
+        mock_run = make_mock_run(
+            {"sbatch": MockResult(returncode=1, stderr="sbatch: error: invalid option")}
+        )
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
         with pytest.raises(RuntimeError, match="sbatch failed"):
-            configured_client.submit(make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt"))
+            configured_client.submit(
+                make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt")
+            )
 
     def test_submit_array(self, configured_client, tmp_path, monkeypatch):
         """Test that submit_array correctly calls sbatch with --array."""
         mock_run = make_mock_run({"sbatch": MockResult(stdout="Submitted batch job 10000")})
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
-        config = make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log")
+        config = make_job_config(
+            tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log"
+        )
         indices = [0, 1, 2]
         job_ids = configured_client.submit_array(config, indices)
 
@@ -284,7 +323,9 @@ class TestSlurmClient:
         mock_run = make_mock_run({"sbatch": MockResult(stdout="Submitted batch job 10000")})
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
-        config = make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log")
+        config = make_job_config(
+            tmp_path, name="test_array", script_name="array.sbatch", log_name="logs/array.log"
+        )
         indices = [0, 2]
         job_ids = configured_client.submit_array(config, indices)
 
@@ -305,6 +346,27 @@ class TestSlurmClient:
         configured_client.cancel("12345")
         assert mock_run.calls[-1] == ["scancel", "12345"]
 
+    def test_update_excludes(self, configured_client, monkeypatch):
+        """The scontrol parameter is ExcNodeList; ExcludeNodes is rejected."""
+        mock_run = make_mock_run({})
+        monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
+
+        configured_client.update_excludes("12345", "node01,node02")
+
+        assert mock_run.calls[-1] == [
+            "scontrol",
+            "update",
+            "JobId=12345",
+            "ExcNodeList=node01,node02",
+        ]
+
+    def test_update_excludes_raises_on_failure(self, configured_client, monkeypatch):
+        mock_run = make_mock_run({"scontrol": MockResult(returncode=1, stderr="denied")})
+        monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
+
+        with pytest.raises(RuntimeError, match="scontrol update failed for job 12345"):
+            configured_client.update_excludes("12345", "node01")
+
     def test_parse_job_id_variations(self):
         """Test parsing various sbatch output formats."""
         assert SlurmClient._parse_job_id("Submitted batch job 12345") == "12345"
@@ -318,16 +380,22 @@ class TestSlurmClient:
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
         with pytest.raises(RuntimeError, match="Unable to parse job id"):
-            configured_client.submit(make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt"))
+            configured_client.submit(
+                make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt")
+            )
 
     def test_submit_array_sbatch_failure(self, configured_client, tmp_path, monkeypatch):
         """Test that submit_array raises on sbatch failure."""
-        mock_run = make_mock_run({"sbatch": MockResult(returncode=1, stderr="sbatch: error: invalid option")})
+        mock_run = make_mock_run(
+            {"sbatch": MockResult(returncode=1, stderr="sbatch: error: invalid option")}
+        )
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
         with pytest.raises(RuntimeError, match="sbatch failed for array"):
             configured_client.submit_array(
-                make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log"),
+                make_job_config(
+                    tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log"
+                ),
                 [0],
             )
 
@@ -338,7 +406,9 @@ class TestSlurmClient:
 
         with pytest.raises(ValueError, match="submit_array requires at least one task"):
             configured_client.submit_array(
-                make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log"),
+                make_job_config(
+                    tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log"
+                ),
                 [],
             )
 
@@ -349,7 +419,9 @@ class TestSlurmClient:
 
         with pytest.raises(RuntimeError, match="Unable to parse job id"):
             configured_client.submit_array(
-                make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log"),
+                make_job_config(
+                    tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log"
+                ),
                 [0],
             )
 
@@ -377,9 +449,15 @@ class TestSlurmClient:
 
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
-        configured_client.submit(make_job_config(tmp_path, name="job_a", script_name="a.sh", log_name="a.txt"))
-        configured_client.submit(make_job_config(tmp_path, name="job_b", script_name="b.sh", log_name="b.txt"))
-        configured_client.submit(make_job_config(tmp_path, name="job_a", script_name="a2.sh", log_name="a2.txt"))
+        configured_client.submit(
+            make_job_config(tmp_path, name="job_a", script_name="a.sh", log_name="a.txt")
+        )
+        configured_client.submit(
+            make_job_config(tmp_path, name="job_b", script_name="b.sh", log_name="b.txt")
+        )
+        configured_client.submit(
+            make_job_config(tmp_path, name="job_a", script_name="a2.sh", log_name="a2.txt")
+        )
 
         job_a_ids = configured_client.job_ids_by_name("job_a")
         assert len(job_a_ids) == 2
@@ -441,7 +519,9 @@ class TestSlurmClient:
         assert job_id in statuses
         assert statuses[job_id] == "COMPLETED"
 
-    def test_squeue_jobs_missing_from_queue_check_sacct(self, configured_client, tmp_path, monkeypatch):
+    def test_squeue_jobs_missing_from_queue_check_sacct(
+        self, configured_client, tmp_path, monkeypatch
+    ):
         """Test squeue checks sacct for jobs not in queue."""
         mock_run = make_mock_run(
             {
@@ -473,7 +553,9 @@ class TestSlurmClient:
         )
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
-        config = make_job_config(tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log")
+        config = make_job_config(
+            tmp_path, name="test_array", script_name="array.sbatch", log_name="array.log"
+        )
         indices = [0, 1, 2, 3]
         configured_client.submit_array(config, indices)
 
@@ -495,7 +577,9 @@ class TestSlurmClient:
         )
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
 
-        configured_client.submit(make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt"))
+        configured_client.submit(
+            make_job_config(tmp_path, name="test", script_name="job.sh", log_name="log.txt")
+        )
         statuses = configured_client.squeue()
 
         assert statuses == {}
@@ -546,7 +630,9 @@ class TestSlurmClient:
             {
                 "sbatch": MockResult(stdout="Submitted batch job 12345"),
                 "squeue": MockResult(stdout=""),
-                "sacct": MockResult(stdout="12345|COMPLETED\n\nmalformed_line_no_pipe\n99999.batch|COMPLETED"),
+                "sacct": MockResult(
+                    stdout="12345|COMPLETED\n\nmalformed_line_no_pipe\n99999.batch|COMPLETED"
+                ),
             }
         )
         monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)

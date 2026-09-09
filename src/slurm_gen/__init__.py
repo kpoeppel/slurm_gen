@@ -28,10 +28,12 @@ from slurm_gen.template_renderer import (
 )
 from slurm_gen.generator import (
     build_sbatch_directives,
+    build_srun_args,
     build_replacements,
     generate_script,
     merge_slurm_config,
 )
+from slurm_gen.exclude import read_exclude_nodes
 from slurm_gen.validator import (
     validate_job_script,
     SlurmValidationError,
@@ -53,7 +55,10 @@ __all__ = [
     "SlurmValidationError",
     # Generation
     "build_sbatch_directives",
+    "build_srun_args",
     "build_replacements",
     "generate_script",
     "merge_slurm_config",
+    # Node exclusion
+    "read_exclude_nodes",
 ]
