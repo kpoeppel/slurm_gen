@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "slurm_gen"
-version = "0.1.0"
+version = "0.1.1"
 description = "SLURM job generation and management library"
 readme = "README.md"
 authors = [
@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 dependencies = [
-    "compoconf>=0.1.11",
+    "compoconf>=0.1.15",
 ]
 
 [project.optional-dependencies]
