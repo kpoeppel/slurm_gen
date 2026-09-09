@@ -18,7 +18,24 @@ from compoconf import (
 
 @dataclass(init=False)
 class SrunConfig(NonStrictDataclass):
-    """Configuration for srun options."""
+    """Configuration for srun options.
+
+    Used by two fields on :class:`SlurmConfig` with very different status:
+
+    ``srun_args``  RENDERED into the ``{srun_opts}`` template placeholder by
+                   ``build_srun_args``. Because it is a mapping, Hydra MERGES it
+                   key-by-key across the defaults list, so a cluster group and an
+                   experiment can each contribute flags without clobbering each
+                   other. Prefer this.
+    ``srun``       LEGACY AND DEAD. No template has a placeholder for it and
+                   nothing reads it, so every flag in an ``srun:`` block (``wait:
+                   60``, ``exclusive: true``, ``kill_on_bad_exit: 1``, ...) has
+                   never reached srun. It is left unrendered on purpose:
+                   switching it on would silently change every cluster at once,
+                   and some of those values are actively harmful (``--wait=60``
+                   kills the step 60 s after the first task exits). Migrate a
+                   block to ``srun_args`` deliberately, one cluster at a time.
+    """
 
     pass
 
@@ -33,6 +50,7 @@ class SbatchConfig(NonStrictDataclass):
     partition: str | None = None
     qos: str | None = None
     time: str = "0-01:00:00"
+    dependency: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -48,13 +66,27 @@ class SlurmConfig(ConfigInterface):
         log_path: Optional path to the log file for submission.
         array: Whether to use job arrays.
         launcher_cmd: Additional launcher command.
-        srun_opts: Additional srun options.
+        srun_opts: Additional srun options, as one verbatim string. A STRING is
+            replaced wholesale on a Hydra merge, so a cluster group and an
+            experiment that both set it will not compose - the last one wins.
+            Use ``srun_args`` for anything that needs to compose; keep this for
+            flags that cannot be expressed as key/value.
         launcher_env_passthrough: Pass environment to launcher.
         env: Environment variables to set.
-        srun: srun configuration.
+        srun_args: srun flags as a MAPPING, merged key-by-key by Hydra and
+            rendered ahead of ``srun_opts``. See :class:`SrunConfig`.
+        srun: LEGACY, NOT RENDERED. See :class:`SrunConfig`.
         sbatch: sbatch configuration.
-        sbatch_overrides: Override sbatch directives.
-        sbatch_extra_directives: Extra sbatch directives.
+        exclude_file: Optional path to a node-exclusion list. When set, the
+            ``--exclude`` directive is resolved FROM THIS FILE AT RENDER TIME,
+            overriding any ``sbatch.exclude`` baked in earlier. A restart
+            re-renders the script but reuses the already-resolved config, so a
+            node excluded after the first submission would otherwise never reach
+            the resubmitted job. A missing or empty file leaves any existing
+            ``sbatch.exclude`` untouched, so a bad path can never silently drop
+            the exclusions.
+        sbatch_extra_directives: Extra sbatch directives (deprecated: add them
+            to ``sbatch`` instead).
     """
 
     class_name: str = "Slurm"
@@ -64,14 +96,17 @@ class SlurmConfig(ConfigInterface):
     name: str = "job"
     script_path: str | None = None
     log_path: str | None = None
+    exclude_file: str | None = None
     array: bool = False
     launcher_cmd: str = ""
     srun_opts: str = ""
     launcher_env_passthrough: bool = False
     env: dict[str, Any] = field(default_factory=dict)
     command: list[str] = field(default_factory=list)
+    srun_args: SrunConfig = field(default_factory=SrunConfig)
     srun: SrunConfig = field(default_factory=SrunConfig)
     sbatch: SbatchConfig = field(default_factory=SbatchConfig)
+    # deprecated, just add to sbatch
     sbatch_extra_directives: list[str] = field(default_factory=list)
     test_only: bool = False
 
@@ -98,6 +133,9 @@ class SlurmClientInterface(Protocol):  # pragma: no cover - protocol definitions
         ...
 
     def squeue(self) -> dict[str, str]:  # pragma: no cover
+        ...
+
+    def update_excludes(self, job_id: str, nodelist: str) -> None:  # pragma: no cover
         ...
 
     def get_job(self, job_id: str):  # pragma: no cover

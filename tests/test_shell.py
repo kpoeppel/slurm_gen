@@ -1,10 +1,13 @@
 """Tests for shell utilities."""
 
+import errno
+import inspect
 import subprocess
+import time
 
 import pytest
 
-from slurm_gen.shell import run_command
+from slurm_gen.shell import DEFAULT_COMMAND_TIMEOUT_S, run_command
 
 
 class TestRunCommand:
@@ -47,3 +50,63 @@ class TestRunCommand:
         """Test command timeout."""
         with pytest.raises(subprocess.TimeoutExpired):
             run_command(["sleep", "10"], timeout=0.1)
+
+
+class TestSpawnRetries:
+    """Transient fork() failures on a saturated login node are retried."""
+
+    def test_retries_eagain_then_succeeds(self, monkeypatch):
+        calls = {"n": 0}
+        real_run = subprocess.run
+
+        def flaky_run(argv, **kwargs):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise OSError(errno.EAGAIN, "Resource temporarily unavailable")
+            return real_run(argv, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", flaky_run)
+        monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+        result = run_command(["echo", "hello"], spawn_retry_backoff=0.0)
+
+        assert calls["n"] == 3
+        assert result.returncode == 0
+        assert "hello" in result.stdout
+
+    def test_gives_up_after_max_retries(self, monkeypatch):
+        calls = {"n": 0}
+
+        def always_eagain(argv, **kwargs):
+            calls["n"] += 1
+            raise OSError(errno.EAGAIN, "Resource temporarily unavailable")
+
+        monkeypatch.setattr(subprocess, "run", always_eagain)
+        monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+        with pytest.raises(OSError):
+            run_command(["echo", "hello"], max_spawn_retries=2, spawn_retry_backoff=0.0)
+
+        assert calls["n"] == 3  # the initial attempt plus two retries
+
+    def test_permanent_oserror_is_not_retried(self, monkeypatch):
+        """ENOENT means the command does not exist; retrying cannot help."""
+        calls = {"n": 0}
+
+        def missing_command(argv, **kwargs):
+            calls["n"] += 1
+            raise OSError(errno.ENOENT, "No such file or directory")
+
+        monkeypatch.setattr(subprocess, "run", missing_command)
+
+        with pytest.raises(OSError):
+            run_command(["definitely-not-a-command"])
+
+        assert calls["n"] == 1
+
+    def test_default_timeout_is_bounded(self):
+        """A wedged slurmctld must not hang the caller forever."""
+        assert DEFAULT_COMMAND_TIMEOUT_S > 0
+        assert inspect.signature(run_command).parameters["timeout"].default == (
+            DEFAULT_COMMAND_TIMEOUT_S
+        )

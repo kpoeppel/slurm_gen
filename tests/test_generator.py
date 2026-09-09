@@ -7,10 +7,11 @@ import pytest
 from slurm_gen.generator import (
     build_replacements,
     build_sbatch_directives,
+    build_srun_args,
     generate_script,
     merge_slurm_config,
 )
-from slurm_gen.schema import SbatchConfig, SlurmConfig
+from slurm_gen.schema import SbatchConfig, SlurmConfig, SrunConfig
 
 
 def make_config(tmp_path: Path) -> SlurmConfig:
@@ -57,6 +58,69 @@ class TestBuildSbatchDirectives:
         job_name_directives = [d for d in directives if "--job-name=" in d]
         assert len(job_name_directives) == 1
 
+    def test_non_strict_extras_render_as_directives(self, tmp_path: Path):
+        """Extra sbatch keys must render as flags, not leak bookkeeping fields."""
+        config = make_config(tmp_path)
+        config.sbatch = SbatchConfig(nodes=4, exclude="node01,node02")
+
+        directives = build_sbatch_directives(config)
+
+        assert "#SBATCH --exclude=node01,node02" in directives
+        assert not any("extras" in d or "non-strict" in d for d in directives)
+
+    def test_exclude_file_is_read_at_render_time(self, tmp_path: Path):
+        """The list on disk wins over whatever was resolved earlier."""
+        exclude_file = tmp_path / "excluded_nodes.txt"
+        exclude_file.write_text("# bad nodes\nnode07\nnode09 node11\n")
+        config = make_config(tmp_path)
+        config.sbatch = SbatchConfig(exclude="stale-node")
+        config.exclude_file = str(exclude_file)
+
+        directives = build_sbatch_directives(config)
+
+        assert "#SBATCH --exclude=node07,node09,node11" in directives
+
+    def test_missing_exclude_file_keeps_resolved_exclusions(self, tmp_path: Path):
+        """A bad path must never silently drop the exclusions we already have."""
+        config = make_config(tmp_path)
+        config.sbatch = SbatchConfig(exclude="node01")
+        config.exclude_file = str(tmp_path / "does-not-exist.txt")
+
+        directives = build_sbatch_directives(config)
+
+        assert "#SBATCH --exclude=node01" in directives
+
+
+class TestBuildSrunArgs:
+    """Tests for build_srun_args."""
+
+    def test_renders_flags_and_values(self, tmp_path: Path):
+        config = make_config(tmp_path)
+        config.srun_args = SrunConfig(cpu_bind="cores", exclusive=True, kill_on_bad_exit=0)
+
+        args = build_srun_args(config)
+
+        assert "--cpu-bind=cores" in args
+        assert "--exclusive" in args
+        # 0 is a value, not a boolean: it must survive as --flag=0
+        assert "--kill-on-bad-exit=0" in args
+
+    def test_false_and_none_are_skipped(self, tmp_path: Path):
+        """False turns off a flag an inherited config group set."""
+        config = make_config(tmp_path)
+        config.srun_args = SrunConfig(exclusive=False, label=None, wait=60)
+
+        args = build_srun_args(config)
+
+        assert args == ["--wait=60"]
+
+    def test_legacy_srun_block_is_not_rendered(self, tmp_path: Path):
+        """``srun`` is legacy and deliberately unrendered; only ``srun_args`` is."""
+        config = make_config(tmp_path)
+        config.srun = SrunConfig(wait=60)
+
+        assert build_srun_args(config) == []
+
 
 class TestBuildReplacements:
     """Tests for build_replacements."""
@@ -80,10 +144,33 @@ class TestBuildReplacements:
         assert replacements["log_path"] == "/tmp/log.txt"
         assert replacements["command"] == "python train.py --epochs 5"
         assert replacements["launcher_cmd"] == "srun"
-        assert replacements["srun_opts"] == "--cpu-bind=cores"
+        # Templates render `srun {srun_opts}bash -c ...`, so the value carries
+        # its own trailing space.
+        assert replacements["srun_opts"] == "--cpu-bind=cores "
         assert replacements["launcher_env_passthrough"] == "true"
         assert "export CUDA_VISIBLE_DEVICES=0" in replacements["env_exports"]
         assert "export OMP_NUM_THREADS=8" in replacements["env_exports"]
+
+    def test_srun_args_render_before_srun_opts(self, tmp_path: Path):
+        config = make_config(tmp_path)
+        config.srun_args = SrunConfig(kill_on_bad_exit=0)
+        config.srun_opts = "  --cpu-bind=cores  "
+
+        replacements = build_replacements(
+            config, job_name="job", log_path="/tmp/log.txt", command=["true"]
+        )
+
+        assert replacements["srun_opts"] == "--kill-on-bad-exit=0 --cpu-bind=cores "
+
+    def test_empty_srun_opts_stays_empty(self, tmp_path: Path):
+        """No flags means no stray space before the command in the template."""
+        config = make_config(tmp_path)
+
+        replacements = build_replacements(
+            config, job_name="job", log_path="/tmp/log.txt", command=["true"]
+        )
+
+        assert replacements["srun_opts"] == ""
 
 
 class TestGenerateScript:

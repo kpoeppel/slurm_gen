@@ -205,6 +205,15 @@ class TestFakeSlurmClient:
         with pytest.raises(ValueError):
             client.submit_array(config, [])
 
+    def test_update_excludes_is_recorded(self, tmp_path: Path):
+        """The fake records the update so callers can be tested against it."""
+        client = FakeSlurmClient(FakeSlurmClientConfig())
+        job_id = client.submit(make_job_config(tmp_path))
+
+        client.update_excludes(job_id, "node01,node02")
+
+        assert client._excludes == {job_id: "node01,node02"}
+
     def test_register_job(self, tmp_path: Path):
         """Test registering an external job."""
         client = FakeSlurmClient(FakeSlurmClientConfig())
@@ -304,6 +313,27 @@ class TestSlurmClient:
 
         configured_client.cancel("12345")
         assert mock_run.calls[-1] == ["scancel", "12345"]
+
+    def test_update_excludes(self, configured_client, monkeypatch):
+        """The scontrol parameter is ExcNodeList; ExcludeNodes is rejected."""
+        mock_run = make_mock_run({})
+        monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
+
+        configured_client.update_excludes("12345", "node01,node02")
+
+        assert mock_run.calls[-1] == [
+            "scontrol",
+            "update",
+            "JobId=12345",
+            "ExcNodeList=node01,node02",
+        ]
+
+    def test_update_excludes_raises_on_failure(self, configured_client, monkeypatch):
+        mock_run = make_mock_run({"scontrol": MockResult(returncode=1, stderr="denied")})
+        monkeypatch.setattr(slurm_gen.client, "run_command", mock_run)
+
+        with pytest.raises(RuntimeError, match="scontrol update failed for job 12345"):
+            configured_client.update_excludes("12345", "node01")
 
     def test_parse_job_id_variations(self):
         """Test parsing various sbatch output formats."""
