@@ -1,7 +1,5 @@
 """Tests for configuration schema."""
 
-import pytest
-
 from slurm_gen import SlurmConfig, SbatchConfig, SrunConfig
 
 

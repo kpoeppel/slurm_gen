@@ -1,7 +1,7 @@
 """Configuration schema for slurm_gen.
 
-These types define the configuration interface for SLURM clients and
-script generation. Designed for use with compoconf.
+These types define the configuration interface for SLURM clients and script generation.
+Designed for use with compoconf.
 """
 
 from __future__ import annotations
@@ -123,7 +123,9 @@ class SlurmClientInterface(Protocol):  # pragma: no cover - protocol definitions
     def submit(self, slurm_config: SlurmConfig) -> str:  # pragma: no cover
         ...
 
-    def submit_array(self, slurm_config: SlurmConfig, indices: list[int]) -> list[str]:  # pragma: no cover
+    def submit_array(
+        self, slurm_config: SlurmConfig, indices: list[int]
+    ) -> list[str]:  # pragma: no cover
         ...
 
     def cancel(self, job_id: str) -> None:  # pragma: no cover

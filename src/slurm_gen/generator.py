@@ -130,7 +130,9 @@ def generate_script(
     return Path(script_path)
 
 
-def merge_slurm_config(base: dict[str, Any] | None, override: dict[str, Any] | None) -> dict[str, Any]:
+def merge_slurm_config(
+    base: dict[str, Any] | None, override: dict[str, Any] | None
+) -> dict[str, Any]:
     if not base:
         return dict(override or {})
     if not override:
